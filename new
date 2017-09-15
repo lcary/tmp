@@ -4,4 +4,4 @@ set -eu
 
 filename=$1
 cp template.cpp $filename
-subl $filename
+sublime $filename
