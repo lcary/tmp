@@ -1,0 +1,8 @@
+#!/bin/bash
+
+set -eu
+
+sourcecode=$1
+objectcode=${sourcecode%.cpp}.out
+g++ -o $objectcode $1
+./$objectcode
