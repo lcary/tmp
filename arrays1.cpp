@@ -29,10 +29,8 @@ int main() {
 
 void input_number(int index, int (&arr)[MAX_SIZE])
 {
-    int x;
     cout << "Enter a number: ";
-    cin >> x;
-    arr[index] = x;
+    cin >> arr[index];
 }
 
 double get_average(int size, int arr[MAX_SIZE])
