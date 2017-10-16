@@ -10,8 +10,6 @@ def fib(n):
     elif n == 2:
         return 1
     else:
-        fib1 = fib(n - 1)
-        fib2 = fib(n - 2)
         value = fib(n - 1) + fib(n - 2)
         return value
 
