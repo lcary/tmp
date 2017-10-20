@@ -2,7 +2,9 @@
 
 set -eu
 
+mkdir -p out/
+
 sourcecode=$1
 objectcode=out/${sourcecode%.cpp}.out
-g++ -o $objectcode $1
+g++-7 -o $objectcode $1
 ./$objectcode
