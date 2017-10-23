@@ -2,7 +2,7 @@
 
 using namespace std;
 
-int binarySearch(int arr[], int arrSize, int val);
+int binarySearch(int arr[], int size, int val);
 // Returns index of a value if it exists in a sorted array;
 // Else returns -1
 
@@ -25,13 +25,13 @@ int main() {
 }
 
 // time = O(log n)
-int binarySearch(int arr[], int arrSize, int val)
+int binarySearch(int arr[], int size, int val)
 {
     int low, mid, high, index;
     bool found = false;
 
     low = 0;
-    high = arrSize - 1;
+    high = size - 1;
     index = -1;
     
     while(!found && (low <= high)) {
