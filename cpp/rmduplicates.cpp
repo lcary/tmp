@@ -7,7 +7,7 @@ void printArray(int arr[], int arrSize);
 int *rmDuplicates(int arr[], int arrSize, int &resArrSize);
 
 int main() {
-    int arr[7] = {2, 3, 4, 1, 5, 4, 3};
+    int arr[7] = {2, 3, 4, 1, 5, 4, 3};  // bug: what if it's 11 instead of 1?????
     int arrSize = 7;
     int *noDupArr;
     int noDupArrSize, i;
