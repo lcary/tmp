@@ -43,10 +43,7 @@ int main() {
 
 void fillClassInfo(Class& aClass)
 {
-    Date date;
-    date.day = 21;
-    date.month = 11;
-    date.year = 2003;
+    Date date = {21, 11, 2003};
 
     Professor prof;
     prof.name = "Phil Collins";
@@ -54,9 +51,7 @@ void fillClassInfo(Class& aClass)
     prof.startDate = date;
     prof.tenured = true;
 
-    aClass.name = "CS101";
-    aClass.credits = 3;
-    aClass.prof = prof;
+    aClass = {"CS101", 3, prof};
 }
 
 void printClassInfo(Class aClass)
