@@ -7,6 +7,7 @@ int main()
     return 0;
 }
 
-void stackoverflow() {
+void stackoverflow()
+{
     stackoverflow();
 }
