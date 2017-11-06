@@ -1,4 +1,4 @@
-// Walter Savitch, 2014 -- CH16# 9: Doodlebug program.
+// Walter Savitch, 2014 -- CH16 Question #9 Answer ("Doodlebug")
 
 // The goal for this project is to create a simple two-dimensional
 // predator-prey simulation. In this simulation the prey are ants
@@ -52,6 +52,74 @@ std::string Cell::str() const
     return '(' + std::to_string(x) + ',' + std::to_string(y) + ')';
 }
 
+// ============================== Organism Interface ==============================
+
+class Organism
+{
+public:
+    Organism(int requiredSurvivalTime, char organismSymbol, const Cell& cell);
+    virtual ~Organism() = 0;
+    virtual void move() = 0;
+    virtual void breed() = 0;
+    virtual void die() = 0;
+    virtual Cell getCell() const = 0;
+    virtual void setCell(const Cell& cell) = 0;
+    virtual int getTimeSurvived() const = 0;
+    virtual void incrementTimeSurvived() = 0;
+    virtual bool readyToBreed() const = 0;
+    const char symbol;
+    friend char getSymbolOrEmptyChar(Organism* organism);
+protected:
+    const int required_survival_time_for_breeding;
+    int timeSurvived;
+    Cell myCell;
+};
+
+Organism::Organism(
+    int requiredSurvivalTime,
+    char organismSymbol,
+    const Cell& cell
+) :
+    myCell(cell),
+    required_survival_time_for_breeding(requiredSurvivalTime),
+    symbol(organismSymbol),
+    timeSurvived(0)
+{ }
+
+Organism::~Organism() {}
+
+char getSymbolOrEmptyChar(Organism* organism)
+{
+    if (organism == NULL)
+        return EMPTY_SPACE_CHAR;
+    else
+        return organism->symbol;
+}
+
+typedef std::vector<Organism*> OrganismVector;
+
+class OrganismComparator
+{
+public:
+    OrganismComparator(char value);
+    OrganismComparator(Organism* organism);
+    bool compare(Organism* organism);
+private:
+    const char compareValue;
+};
+
+OrganismComparator::OrganismComparator(char value) :
+    compareValue(value)
+{ }
+
+OrganismComparator::OrganismComparator(Organism* organism) :
+    compareValue(getSymbolOrEmptyChar(organism))
+{ }
+
+bool OrganismComparator::compare(Organism* organism)
+{
+    return (compareValue == getSymbolOrEmptyChar(organism));
+}
 
 // ============================== Grid ==============================
 
@@ -66,16 +134,16 @@ CellVector getCell1dSet(int xMax, int yMax)
     return cellSet;
 }
 
-char** getCell2dArray(int xMax, int yMax)
+Organism*** getCell2dArray(int xMax, int yMax)
 {
-    char** cellArray = 0;
+    Organism*** cellArray = 0;
     // create columns first
-    cellArray = new char*[xMax];
+    cellArray = new Organism**[xMax];
     for (int x = 0; x < xMax; x++) {
         // create rows second
-        cellArray[x] = new char[yMax];
+        cellArray[x] = new Organism*[yMax];
         for (int y = 0; y < yMax; y++) {
-            cellArray[x][y] = EMPTY_SPACE_CHAR;
+            cellArray[x][y] = NULL;
         }
     }
     return cellArray;
@@ -86,18 +154,19 @@ class Grid
 public:
     Grid(int x, int y);
     void display() const;
-    Cell getRandomCellInGrid() const;
+    Cell getRandomEmptyCellInGrid() const;
     void clearCell(const Cell& cell);
-    void setCellValue(const Cell& cell, char value);
-    char getCellValue(const Cell& cell) const;
-    char getCellValue(int x, int y) const;
+    void setCellValue(const Cell& cell, Organism* organism);
+    Organism* getCellValue(const Cell& cell) const;
+    Organism* getCellValue(int x, int y) const;
     CellVector getAdjacentCells(const Cell& cell) const;
+    CellVector getRandomizedAdjacentCells(const Cell& cell) const;
     Cell getEmptyCell(const CellVector& adjacentCells, bool& found) const;
-    Cell getRandomMatchingCell(const CellVector& cellSet, char matchChar, bool& found) const;
+    Cell getRandomMatchingCell(const CellVector& cellSet, OrganismComparator comparator, bool& found) const;
 private:
-    bool cellContains(const Cell& cell, char value) const	;
+    bool cellContains(const Cell& cell, OrganismComparator comparator) const;
     bool isInRange(const Cell& cell) const;
-    char** cell2dArray;
+    Organism*** cell2dArray;
     const CellVector cell1dSet;
     const int xMax;
     const int yMax;
@@ -114,20 +183,20 @@ Grid::Grid(int x, int y) :
 
 void Grid::clearCell(const Cell& cell)
 {
-    setCellValue(cell, EMPTY_SPACE_CHAR);
+    setCellValue(cell, NULL);
 }
 
-void Grid::setCellValue(const Cell& cell, char value)
+void Grid::setCellValue(const Cell& cell, Organism* organism)
 {
-    cell2dArray[cell.x][cell.y] = value;
+    cell2dArray[cell.x][cell.y] = organism;
 }
 
-Cell Grid::getRandomCellInGrid() const
+Cell Grid::getRandomEmptyCellInGrid() const
 {
     Cell cell;
     bool found = false;
 
-    cell = getRandomMatchingCell(cell1dSet, EMPTY_SPACE_CHAR, found);
+    cell = getRandomMatchingCell(cell1dSet, OrganismComparator(EMPTY_SPACE_CHAR), found);
 
     if (found)
         return cell;
@@ -139,19 +208,19 @@ Cell Grid::getRandomCellInGrid() const
     }
 }
 
-char Grid::getCellValue(int x, int y) const
+Organism* Grid::getCellValue(int x, int y) const
 {
     return cell2dArray[x][y];
 }
 
-char Grid::getCellValue(const Cell& cell) const
+Organism* Grid::getCellValue(const Cell& cell) const
 {
     return getCellValue(cell.x, cell.y);
 }
 
-bool Grid::cellContains(const Cell& cell, char data) const
+bool Grid::cellContains(const Cell& cell, OrganismComparator comparator) const
 {
-    return (getCellValue(cell) == data);
+    return comparator.compare(getCellValue(cell));
 }
 
 bool Grid::isInRange(const Cell& cell) const
@@ -185,7 +254,14 @@ CellVector Grid::getAdjacentCells(const Cell& cell) const
     return actualAdjacentCells;
 }
 
-Cell Grid::getRandomMatchingCell(const CellVector& cellSet, char matchChar, bool& found) const
+CellVector Grid::getRandomizedAdjacentCells(const Cell& cell) const
+{
+    CellVector adjacentCells = getAdjacentCells(cell);
+    std::random_shuffle(adjacentCells.begin(), adjacentCells.end());
+    return adjacentCells;
+}
+
+Cell Grid::getRandomMatchingCell(const CellVector& cellSet, OrganismComparator comparator, bool& found) const
 {
     Cell cell;
     int cellsSearched = 0;
@@ -194,7 +270,7 @@ Cell Grid::getRandomMatchingCell(const CellVector& cellSet, char matchChar, bool
     while (cellsSearched < numCells && !found) {
         int randIndex = (std::rand() % numCells);  // one of [0, 1, 2, 3]
         cell = cellSet[randIndex];
-        if (cellContains(cell, matchChar)) {
+        if (cellContains(cell, comparator)) {
             found = true;
         }
         cellsSearched++;
@@ -204,147 +280,21 @@ Cell Grid::getRandomMatchingCell(const CellVector& cellSet, char matchChar, bool
 
 Cell Grid::getEmptyCell(const CellVector& adjacentCells, bool& found) const
 {
-    return getRandomMatchingCell(adjacentCells, EMPTY_SPACE_CHAR, found);
+    return getRandomMatchingCell(adjacentCells, OrganismComparator(EMPTY_SPACE_CHAR), found);
 }
 
 void Grid::display() const
 {
-    for (int i = 0; i < xMax; i++) {
-        for (int j = 0; j < yMax; j++) {
-            std::cout << cell2dArray[i][j] << ' ';
+    for (int x = 0; x < xMax; x++) {
+        for (int y = 0; y < yMax; y++) {
+            std::cout << getSymbolOrEmptyChar(getCellValue(x, y)) << ' ';
         }
         std::cout << std::endl;
     }
     std::cout << std::endl;
 }
 
-// ============================== Organism ==============================
-
-class Organism
-{
-public:
-    Organism(int requiredSurvivalTime, char organismSymbol, const Cell& cell);
-    virtual ~Organism() = 0;
-    virtual void move(const Cell& cell) = 0;
-    Cell getCell() const;
-    void setCell(const Cell& cell);
-    int getTimeSurvived() const;
-    void incrementTimeSurvived();
-    bool readyToBreed() const;
-    const char symbol;
-protected:
-    const int required_survival_time_for_breeding;
-    int timeSurvived;
-private:
-    Cell myCell;
-};
-
-Organism::Organism(int requiredSurvivalTime, char organismSymbol, const Cell& cell) :
-    myCell(cell),
-    required_survival_time_for_breeding(requiredSurvivalTime),
-    symbol(organismSymbol),
-    timeSurvived(0)
-{ }
-
-Organism::~Organism() {}
-
-bool Organism::readyToBreed() const
-{
-    if (getTimeSurvived() == 0)
-        return false;
-    return ((getTimeSurvived() % required_survival_time_for_breeding) == 0);
-}
-
-void Organism::setCell(const Cell& cell)
-{
-    this->myCell = cell;
-}
-
-Cell Organism::getCell() const
-{
-    return myCell;
-}
-
-int Organism::getTimeSurvived() const
-{
-    return timeSurvived;
-}
-
-void Organism::incrementTimeSurvived()
-{
-    timeSurvived++;
-}
-
-// ============================== Ant ==============================
-
-
-class Ant : public Organism
-{
-public:
-    Ant(const Cell& cell);
-    ~Ant();
-    void move(const Cell& cell);
-};
-
-Ant::~Ant() {}
-
-Ant::Ant(const Cell& cell) : Organism::Organism(3, ANT_CHAR, cell)
-{ }
-
-void Ant::move(const Cell& cell)
-{
-    setCell(cell);
-}
-
-// ============================== Doodlebug ==============================
-
-class Doodlebug : public Organism
-{
-public:
-    Doodlebug(const Cell& cell);
-    ~Doodlebug();
-    void incrementLastAntMeal();
-    bool isStarving() const;
-    void move(const Cell& cell);
-    void eatAnt();
-private:
-    int lastAntMeal;
-    const int max_time_without_eating;
-};
-
-Doodlebug::~Doodlebug() {}
-
-Doodlebug::Doodlebug(const Cell& cell) :
-    Organism::Organism(8, DOODLEBUG_CHAR, cell),
-    lastAntMeal(0),
-    max_time_without_eating(3)
-{ }
-
-void Doodlebug::move(const Cell& cell)
-{
-    setCell(cell);
-}
-
-
-bool Doodlebug::isStarving() const
-{
-    return (lastAntMeal >= max_time_without_eating);
-}
-
-void Doodlebug::incrementLastAntMeal()
-{
-    lastAntMeal++;
-}
-
-void Doodlebug::eatAnt()
-{
-    lastAntMeal = 0;  // reset last ant meal, since doodlebug just ate
-}
-
-// ============================== Organism Creator ==============================
-
-typedef std::vector<Doodlebug*> DoodlebugVector;
-typedef std::vector<Organism*> OrganismVector;
+// ============================== OrganismCreator ==============================
 
 // Instances of this creator contain instances of organisms
 // Instances of this creator record instances of organisms
@@ -352,27 +302,29 @@ typedef std::vector<Organism*> OrganismVector;
 class OrganismCreator
 {
 public:
-    OrganismCreator();
+    OrganismCreator(Grid* grid);
     virtual Organism* create(const Cell& cell) = 0;
     OrganismVector getOrganisms();
     void remove(const Cell& cell);
     int count() const;
 protected:
-    void store(Organism* organism);
+    Grid* myGrid;
+    void store(Organism* organism, Cell cell);
     int findIndex(const Cell& cell);
     OrganismVector organisms;
 };
 
-OrganismCreator::OrganismCreator() { }
+OrganismCreator::OrganismCreator(Grid* grid) : myGrid(grid) { }
 
 OrganismVector OrganismCreator::getOrganisms()
 {
     return organisms;
 }
 
-void OrganismCreator::store(Organism* organismPtr)
+void OrganismCreator::store(Organism* organismPtr, Cell cell)
 {
     organisms.push_back(organismPtr);
+    myGrid->setCellValue(cell, organismPtr);
 }
 
 int OrganismCreator::count() const
@@ -401,29 +353,251 @@ void OrganismCreator::remove(const Cell& cell)
     ptr = nullptr;
 }
 
+// ============================== Organism Implementation ==============================
+
+class OrganismImpl : public Organism
+{
+public:
+    OrganismImpl(
+        int requiredSurvivalTime,
+        char organismSymbol,
+        const Cell& cell,
+        Grid* grid,
+        OrganismCreator* creator);
+    ~OrganismImpl() = 0;
+    virtual void move() = 0;
+    void breed();
+    Cell getCell() const;
+    void setCell(const Cell& cell);
+    int getTimeSurvived() const;
+    void incrementTimeSurvived();
+    bool readyToBreed() const;
+    void die();
+private:
+    OrganismCreator* myCreator;
+protected:
+    void moveOrganism(const Cell& newCell);
+    Grid* myGrid;
+};
+
+OrganismImpl::OrganismImpl(
+    int requiredSurvivalTime,
+    char organismSymbol,
+    const Cell& cell,
+    Grid* grid,
+    OrganismCreator* creator
+) :
+    Organism::Organism(requiredSurvivalTime, organismSymbol, cell),
+    myCreator(creator),
+    myGrid(grid)
+{ }
+
+OrganismImpl::~OrganismImpl() {}
+
+bool OrganismImpl::readyToBreed() const
+{
+    if (getTimeSurvived() == 0)
+        return false;
+    return ((getTimeSurvived() % required_survival_time_for_breeding) == 0);
+}
+
+void OrganismImpl::breed()
+{
+    Cell breedCell;
+    bool canBreed = false;
+
+    CellVector adjacentCells = myGrid->getRandomizedAdjacentCells(getCell());
+
+    breedCell = myGrid->getEmptyCell(adjacentCells, canBreed);
+
+    if (canBreed) {
+        myCreator->create(breedCell);
+    }
+}
+
+void OrganismImpl::setCell(const Cell& cell)
+{
+    this->myCell = cell;
+}
+
+Cell OrganismImpl::getCell() const
+{
+    return myCell;
+}
+
+int OrganismImpl::getTimeSurvived() const
+{
+    return timeSurvived;
+}
+
+void OrganismImpl::incrementTimeSurvived()
+{
+    timeSurvived++;
+}
+
+void OrganismImpl::die()
+{
+    myCreator->remove(getCell());
+    myGrid->clearCell(getCell());
+}
+
+void OrganismImpl::moveOrganism(const Cell& newCell)
+{
+    myGrid->clearCell(getCell());
+    myGrid->setCellValue(newCell, this);
+    setCell(newCell);
+}
+
+// ============================== Ant ==============================
+
+
+class Ant : public OrganismImpl
+{
+public:
+    Ant(const Cell& cell, Grid* grid, OrganismCreator* creator);
+    ~Ant();
+    void move();
+private:
+    Cell getNextAdjacentCell(bool& found) const;
+};
+
+Ant::~Ant() {}
+
+Ant::Ant(const Cell& cell, Grid* grid, OrganismCreator* creator) :
+    OrganismImpl::OrganismImpl(3, ANT_CHAR, cell, grid, creator)
+{ }
+
+Cell Ant::getNextAdjacentCell(bool& found) const
+{
+    Cell cell = getCell();
+    CellVector adjacentCells = myGrid->getRandomizedAdjacentCells(cell);
+    return myGrid->getEmptyCell(adjacentCells, found);
+}
+
+void Ant::move()
+{
+    Cell newCell;
+    bool canMove;
+    canMove = false;
+    newCell = getNextAdjacentCell(canMove);
+
+    if (canMove) {
+        moveOrganism(newCell);
+    }
+}
+
 class AntCreator : public OrganismCreator
 {
 public:
-    virtual Ant* create(const Cell& cell);
+    AntCreator(Grid* grid);
+    Ant* create(const Cell& cell);
 };
+
+AntCreator::AntCreator(Grid* grid) :
+    OrganismCreator::OrganismCreator(grid)
+{ }
 
 Ant* AntCreator::create(const Cell& cell)
 {
-    Ant* newAnt = new Ant(cell);
-    store(newAnt);
+    Ant* newAnt = new Ant(cell, myGrid, this);
+    store(newAnt, cell);
     return newAnt;
 }
+
+// ============================== Doodlebug ==============================
+
+class Doodlebug : public OrganismImpl
+{
+public:
+    Doodlebug(const Cell& cell, Grid* grid, OrganismCreator* creator);
+    ~Doodlebug();
+    void incrementTimeWithoutEating();
+    bool isStarving() const;
+    void move();
+    void eatOrganism(Cell cell);
+    Cell getNextCell(bool& found);
+    Cell searchAnts(const CellVector& searchCells, bool& found) const;
+private:
+    int timeWithoutEating;
+    const int max_time_without_eating;
+    OrganismCreator* myCreator;
+};
+
+Doodlebug::~Doodlebug() {}
+
+Doodlebug::Doodlebug(const Cell& cell, Grid* grid, OrganismCreator* creator) :
+    OrganismImpl::OrganismImpl(8, DOODLEBUG_CHAR, cell, grid, creator),
+    timeWithoutEating(0),
+    max_time_without_eating(3)
+{ }
+
+void Doodlebug::move()
+{
+    Cell newCell;
+    bool canMove;
+    canMove = false;
+    newCell = getNextCell(canMove);
+
+    if (canMove) {
+        moveOrganism(newCell);
+    }
+}
+
+
+bool Doodlebug::isStarving() const
+{
+    return (timeWithoutEating >= max_time_without_eating);
+}
+
+void Doodlebug::incrementTimeWithoutEating()
+{
+    timeWithoutEating++;
+}
+
+void Doodlebug::eatOrganism(Cell cell)
+{
+    Organism* organism = myGrid->getCellValue(cell);
+    organism->die();
+    timeWithoutEating = 0;  // reset last ant meal, since doodlebug just ate
+}
+
+Cell Doodlebug::searchAnts(const CellVector& searchCells, bool& found) const
+{
+    return myGrid->getRandomMatchingCell(searchCells, OrganismComparator(ANT_CHAR), found);
+}
+
+Cell Doodlebug::getNextCell(bool& found)
+{
+    Cell cell = getCell();
+    CellVector adjacentCells = myGrid->getRandomizedAdjacentCells(cell);
+
+    Cell nextCell = searchAnts(adjacentCells, found);
+
+    if (found) {
+        eatOrganism(nextCell);
+        return nextCell;
+    } else {
+        return myGrid->getEmptyCell(adjacentCells, found);
+    }
+}
+
+typedef std::vector<Doodlebug*> DoodlebugVector;
 
 class DoodlebugCreator : public OrganismCreator
 {
 public:
-    virtual Doodlebug* create(const Cell& cell);
+    DoodlebugCreator(Grid* grid);
+    Doodlebug* create(const Cell& cell);
 };
+
+DoodlebugCreator::DoodlebugCreator(Grid* grid) :
+    OrganismCreator::OrganismCreator(grid)
+{ }
 
 Doodlebug* DoodlebugCreator::create(const Cell& cell)
 {
-    Doodlebug* newDoodlebug = new Doodlebug(cell);
-    store(newDoodlebug);
+    Doodlebug* newDoodlebug = new Doodlebug(cell, myGrid, this);
+    store(newDoodlebug, cell);
     return newDoodlebug;
 }
 
@@ -446,37 +620,22 @@ private:
     DoodlebugCreator* doodlebugCreator;
     void moveAnts();
     void moveDoodlebugs();
-    void removeOrganism(const Cell& cell, OrganismCreator* creator);
-    void createOrganism(OrganismCreator* creator, const Cell& cell);
     void createOrganisms(OrganismCreator* creator, int count);
-    void moveOrganism(Organism* organism, const Cell& newCell);
-    CellVector getRandomizedAdjacentCells(const Cell& cell) const;
-    Cell getNextAdjacentCell(Organism* organism, bool& found) const;
-    Cell getNextDoodlebugCell(Doodlebug* doodlebug, bool& found);
-    void breedIfPossible(Organism* organism, OrganismCreator* creator);
-    Cell searchAnts(const CellVector& searchCells, bool& found) const;
-    void moveOrganism(const Cell& cell);
 };
 
 GridController::GridController() { }
 
 GridController::GridController(Grid* gridPtr) : grid(gridPtr)
 {
-    this->antCreator = new AntCreator();
-    this->doodlebugCreator = new DoodlebugCreator();
-}
-
-void GridController::createOrganism(OrganismCreator* creator, const Cell& cell)
-{
-    Organism* organismPtr = creator->create(cell);
-    grid->setCellValue(cell, organismPtr->symbol);
+    this->antCreator = new AntCreator(gridPtr);
+    this->doodlebugCreator = new DoodlebugCreator(gridPtr);
 }
 
 void GridController::createOrganisms(OrganismCreator* creator, int count)
 {
     for (int i = 0; i < count; i++) {
-        Cell cell = grid->getRandomCellInGrid();
-        createOrganism(creator, cell);
+        Cell cell = grid->getRandomEmptyCellInGrid();
+        creator->create(cell);
     }
 }
 
@@ -490,73 +649,8 @@ void GridController::createDoodlebugs(int count)
     createOrganisms(doodlebugCreator, count);
 }
 
-void GridController::removeOrganism(const Cell& cell, OrganismCreator* creator)
-{
-    creator->remove(cell);
-    grid->clearCell(cell);
-}
-
-CellVector GridController::getRandomizedAdjacentCells(const Cell& cell) const
-{
-    CellVector adjacentCells = grid->getAdjacentCells(cell);
-    std::random_shuffle(adjacentCells.begin(), adjacentCells.end());
-    return adjacentCells;
-}
-
-Cell GridController::getNextDoodlebugCell(Doodlebug* doodlebug, bool& found)
-{
-    Cell cell = doodlebug->getCell();
-    CellVector adjacentCells = getRandomizedAdjacentCells(cell);
-
-    Cell nextCell = searchAnts(adjacentCells, found);
-
-    if (found) {
-        doodlebug->eatAnt();
-        removeOrganism(nextCell, antCreator);
-        return nextCell;
-    } else {
-        return grid->getEmptyCell(adjacentCells, found);
-    }
-}
-
-Cell GridController::getNextAdjacentCell(Organism* organism, bool& found) const
-{
-    Cell cell = organism->getCell();
-    CellVector adjacentCells = getRandomizedAdjacentCells(cell);
-    return grid->getEmptyCell(adjacentCells, found);
-}
-
-Cell GridController::searchAnts(const CellVector& searchCells, bool& found) const
-{
-    return grid->getRandomMatchingCell(searchCells, ANT_CHAR, found);
-}
-
-void GridController::breedIfPossible(Organism* organism, OrganismCreator* creator)
-{
-    Cell breedCell;
-    bool canBreed = false;
-
-    CellVector adjacentCells = getRandomizedAdjacentCells(organism->getCell());
-
-    breedCell = grid->getEmptyCell(adjacentCells, canBreed);
-
-    if (canBreed) {
-        createOrganism(creator, breedCell);
-    }
-}
-
-void GridController::moveOrganism(Organism* organism, const Cell& newCell)
-{
-    grid->clearCell(organism->getCell());
-    grid->setCellValue(newCell, organism->symbol);
-    organism->move(newCell);
-}
-
 void GridController::moveDoodlebugs()
 {
-    Cell newCell;
-    bool canMove;
-
     // During one turn, all the doodlebugs should move before the ants do.
     DoodlebugVector breedingDoodlebugs;
     DoodlebugVector starvingDoodlebugs;
@@ -564,16 +658,11 @@ void GridController::moveDoodlebugs()
     OrganismVector doodlebugs = doodlebugCreator->getOrganisms();
 
     for (int i = 0; i < doodlebugs.size(); i++) {
-        canMove = false;
         Doodlebug* doodlebug = dynamic_cast<Doodlebug*>(doodlebugs[i]);
 
-        newCell = getNextDoodlebugCell(doodlebug, canMove);
+        doodlebug->move();
 
-        if (canMove) {
-            moveOrganism(doodlebug, newCell);
-        }
-
-        doodlebug->incrementLastAntMeal();
+        doodlebug->incrementTimeWithoutEating();
         doodlebug->incrementTimeSurvived();
 
         if (doodlebug->readyToBreed())
@@ -588,31 +677,24 @@ void GridController::moveDoodlebugs()
 
     for (int i = 0; i < breedingDoodlebugs.size(); i++) {
         Doodlebug* doodlebug = breedingDoodlebugs[i];
-        breedIfPossible(doodlebug, doodlebugCreator);
+        doodlebug->breed();
     }
 
     for (int i = 0; i < starvingDoodlebugs.size(); i++) {
         Doodlebug* doodlebug = starvingDoodlebugs[i];
-        removeOrganism(doodlebug->getCell(), doodlebugCreator);
+        doodlebug->die();
     }
 }
 
 void GridController::moveAnts()
 {
-    Cell newCell;
-    bool canMove;
     OrganismVector ants = antCreator->getOrganisms();
 
     OrganismVector antsToBreed;
     for (int i = 0; i < ants.size(); i++) {
-        canMove = false;
         Organism* ant = ants[i];
 
-        newCell = getNextAdjacentCell(ant, canMove);
-
-        if (canMove) {
-            moveOrganism(ant, newCell);
-        }
+        ant->move();
 
         ant->incrementTimeSurvived();
 
@@ -622,7 +704,7 @@ void GridController::moveAnts()
 
     for (int i = 0; i < antsToBreed.size(); i++) {
         Organism* ant = ants[i];
-        breedIfPossible(ant, antCreator);
+        ant->breed();
     }
 }
 
@@ -652,12 +734,11 @@ int main()
 
     Grid* grid = new Grid(20, 20);
     GridController controller = GridController(grid);
-    controller.display();
 
     // Initialize the world with 5 doodlebugs and 100 ants.
+    std::cout << "Creating organisms..." << std::endl;
     controller.createAnts(100);
     controller.createDoodlebugs(5);
-    std::cout << "Organisms created." << std::endl;
     controller.display();
 
     // After each time step, prompt the user to press
